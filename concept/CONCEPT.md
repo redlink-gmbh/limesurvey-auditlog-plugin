@@ -711,3 +711,20 @@ New Decoupled Workflow: The plugin no longer enforces a redirect to the OAuth lo
 
  ##### Note on Plugin Independence (April 2026)
 As of the latest implementation, the UserAuditLogPlugin follows a "Log what is available" philosophy. It does not act as a gatekeeper for survey access. If your project requires mandatory OAuth authentication, this should be configured via LimeSurvey's internal survey permissions or the AuthOAuth2 plugin settings. The audit log will faithfully record the identity of whoever is interacting with the survey, even if they are an anonymous guest.
+
+---
+
+### Authentication Enforcement — Companion Plugin
+
+For production use, authentication enforcement is delegated to the **[limesurvey-authenticated-surveys](https://github.com/auth-it-center/limesurvey-authenticated-surveys)** plugin. This plugin forces a logged-in LimeSurvey admin user before the survey can be accessed — entirely independent of our plugin.
+
+**How the two plugins interact:**
+
+| Responsibility | Plugin |
+|---|---|
+| Block unauthenticated access to the survey | `limesurvey-authenticated-surveys` |
+| Log whoever is authenticated (or null if guest) | `UserAuditLogPlugin` |
+
+Because `limesurvey-authenticated-surveys` runs first and redirects guests away, in practice `oauth_user_id` and `oauth_username` will always be populated in our audit log — guests never reach the survey. However, our plugin does not depend on this guarantee: it logs null for unauthenticated users if the enforcement plugin is ever disabled or misconfigured. The two plugins are activated independently.
+
+**No changes to UserAuditLogPlugin are required** to support this setup. The plugin already reads `Yii::app()->user` passively — it gains the logged-in identity automatically once `limesurvey-authenticated-surveys` has enforced the login.

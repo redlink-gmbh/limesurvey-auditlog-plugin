@@ -63,6 +63,11 @@ The schema is defined and implementation-ready. The total research and decision 
 
 ---
 
+#### Authentication enforcement — production setup
+Authentication enforcement is handled by the companion plugin [limesurvey-authenticated-surveys](https://github.com/auth-it-center/limesurvey-authenticated-surveys), which blocks unauthenticated access to surveys at the LimeSurvey level. UserAuditLogPlugin remains decoupled — it logs whoever is authenticated. In a correctly configured deployment, `oauth_user_id` / `oauth_username` will always be populated because unauthenticated users are redirected before reaching the survey. The two plugins are activated independently; our plugin degrades gracefully (logs null identity) if enforcement is ever disabled.
+
+---
+
 ####  How a reviewer works with the data
 Access is triggered by a legal/regulatory requirement or a data subject request. A person with direct access to the database performs the following steps:
 
