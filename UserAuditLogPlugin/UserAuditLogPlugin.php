@@ -8,6 +8,7 @@ class UserAuditLogPlugin extends PluginBase
     static protected $description = 'Records a complete audit trail of user interactions with surveys for eCRF and GDPR compliance.';
 
     private const QUESTION_TYPES = [
+        '1' => 'array_dual_scale',
         '5' => 'five_point_choice',
         'A' => 'array_radio_five_point',
         'B' => 'array_radio_ten_point',
@@ -143,16 +144,17 @@ class UserAuditLogPlugin extends PluginBase
     }
 
     function parseName(name) {
-        var m = name.match(/^(\d+)X(\d+)X(\d+)(\w*)$/);
+        var m = name.match(/^(\d+)X(\d+)X(\d+)(\w*)(?:#(\d+))?$/);
         if (!m) return null;
         var subParts = m[4] ? m[4].split('_') : [];
-        return { qid: parseInt(m[3], 10), gid: parseInt(m[2], 10), sub: subParts[0] || null, col: subParts[1] || null };
+        return { qid: parseInt(m[3], 10), gid: parseInt(m[2], 10), sub: subParts[0] || null, col: subParts[1] || null, scale: m[5] != null ? parseInt(m[5], 10) : null };
     }
 
     function getValue(el) {
-        if (el.type === 'checkbox' || el.type === 'radio') return el.checked ? el.value : null;
+        if (el.type === 'checkbox' || el.type === 'radio') return (el.checked && el.value !== '') ? el.value : null;
         return el.value !== '' ? el.value : null;
     }
+
 
     var oldValues = {};
     \$('input, select, textarea').each(function () {
@@ -182,6 +184,7 @@ class UserAuditLogPlugin extends PluginBase
             old_value:         oldVal !== null ? oldVal : '',
             new_value:         newVal !== null ? newVal : ''
         };
+        if (parsed.scale !== null) changeData.dual_scale = parsed.scale;
         if (resolvedPage !== null) changeData.page_number = resolvedPage;
         var params = new URLSearchParams(changeData);
         var sep = endpoint.indexOf('?') !== -1 ? '&' : '?';
@@ -200,15 +203,30 @@ class UserAuditLogPlugin extends PluginBase
     \$(document).on('change', 'input, select, textarea', function () {
         var el = this;
         if (!el.name) return;
-        if (!parseName(el.name)) return;
+        var parsed = parseName(el.name);
+        if (!parsed) return;
         var newVal = getValue(el);
         var oldVal = oldValues[el.name] !== undefined ? oldValues[el.name] : null;
+        if (oldVal === newVal) return;
         oldValues[el.name] = newVal;
         sendChange(el, oldVal, newVal);
+        if (parsed.scale !== null && newVal === null) {
+            var otherScale = parsed.scale === 0 ? 1 : 0;
+            var otherName = el.name.replace(/#\d+$/, '#' + otherScale);
+            var otherOldVal = oldValues[otherName] !== undefined ? oldValues[otherName] : null;
+            if (otherOldVal !== null) {
+                var otherEl = document.querySelector('input[name="' + otherName + '"]');
+                if (otherEl) {
+                    oldValues[otherName] = null;
+                    sendChange(otherEl, otherOldVal, null);
+                }
+            }
+        }
     });
 
     \$('input').each(function () {
         if (!this.name || !parseName(this.name)) return;
+        if (this.type === 'hidden') return;
         var el = this;
         var proto = Object.getPrototypeOf(el);
         var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
@@ -217,7 +235,9 @@ class UserAuditLogPlugin extends PluginBase
             get: function () { return descriptor.get.call(el); },
             set: function (v) {
                 descriptor.set.call(el, v);
-                var newVal = v !== '' ? v : null;
+                var newVal = (el.type === 'radio' || el.type === 'checkbox')
+                    ? (el.checked && v !== '' ? v : null)
+                    : (v !== '' ? v : null);
                 var oldVal = oldValues[el.name] !== undefined ? oldValues[el.name] : null;
                 if (oldVal === newVal) return;
                 oldValues[el.name] = newVal;
@@ -319,10 +339,75 @@ JS
             $colQid = $col ? (int) $col->qid : null;
         }
 
-        $question  = $qid ? Question::model()->findByPk($qid) : null;
-        $inputType = $question
-            ? (self::QUESTION_TYPES[$question->type] ?? $question->type)
-            : $request->getParam('input_type');
+        $question    = $qid ? Question::model()->findByPk($qid) : null;
+        $effectiveQid = $qid;
+        $rankSubQid   = null;
+
+        // Sub-questions (e.g. ranking positions) may be excluded by the model's
+        // default scope; resolve the parent question and restructure identifiers
+        // so question_id = parent qid, sub_question_id = rank-position qid.
+        if (!$question && $qid) {
+            $parentQid = (int) Yii::app()->db->createCommand()
+                ->select('parent_qid')
+                ->from(Yii::app()->db->tablePrefix . 'questions')
+                ->where('qid = :qid', [':qid' => $qid])
+                ->queryScalar();
+            if ($parentQid) {
+                $question     = Question::model()->findByPk($parentQid);
+                $effectiveQid = $parentQid;
+                $rankSubQid   = $qid;
+            }
+        }
+
+        // Fallback 2: ranking questions encode an answer ID (aid) in the field name rather
+        // than a question ID. Look up the parent qid via lime_answers.
+        if (!$question && $qid) {
+            $answerQid = (int) Yii::app()->db->createCommand()
+                ->select('qid')
+                ->from(Yii::app()->db->tablePrefix . 'answers')
+                ->where('aid = :aid', [':aid' => $qid])
+                ->queryScalar();
+            if ($answerQid) {
+                $question     = Question::model()->findByPk($answerQid);
+                $effectiveQid = $answerQid;
+                $rankSubQid   = $qid;
+            }
+        }
+
+        // Fallback 3: ranking field name IDs are dynamically generated and exist in neither
+        // lime_questions nor lime_answers. Find the ranking question (type='R') in the same
+        // survey+group via raw SQL and treat the submitted qid as a ranked-item sub-identifier.
+        $resolvedInputType = null;
+        if (!$question && $qid) {
+            $gidParam = (int) $request->getParam('group_id');
+            $rankQid  = (int) Yii::app()->db->createCommand()
+                ->select('qid')
+                ->from(Yii::app()->db->tablePrefix . 'questions')
+                ->where('sid = :sid AND gid = :gid AND type = :type AND parent_qid = 0', [
+                    ':sid'  => $surveyId,
+                    ':gid'  => $gidParam,
+                    ':type' => 'R',
+                ])
+                ->queryScalar();
+            if ($rankQid) {
+                // Dynamic field ID = parentQid . rankPosition (e.g. 10241 = qid 1024, position 1).
+                // Strip the parent prefix to get a human-readable rank position (1, 2, 3…).
+                $rankPosition      = (int) substr((string) $qid, strlen((string) $rankQid));
+                $effectiveQid      = $rankQid;
+                $rankSubQid        = $rankPosition ?: $qid;
+                $resolvedInputType = 'ranking';
+            }
+        }
+
+        $inputType = $resolvedInputType
+            ?? ($question
+                ? (self::QUESTION_TYPES[$question->type] ?? $question->type)
+                : $request->getParam('input_type'));
+
+        $dualScale = $request->getParam('dual_scale');
+        if ($dualScale !== null && $dualScale !== '') {
+            $inputType .= '_' . (int) $dualScale;
+        }
 
         $rawPage = $request->getParam('page_number');
         $this->writeLog([
@@ -331,8 +416,8 @@ JS
             'event_type'        => 'answer_change',
             'page_number'       => ($rawPage !== null && $rawPage !== '') ? (int) $rawPage : null,
             'group_id'          => (int) $request->getParam('group_id'),
-            'question_id'       => $qid ?: null,
-            'sub_question_id'   => $subQid,
+            'question_id'       => $effectiveQid ?: null,
+            'sub_question_id'   => $subQid ?? ($resolvedInputType === 'ranking' && ($request->getParam('new_value') === '' || $request->getParam('new_value') === null) ? null : $rankSubQid),
             'column_id'         => $colQid,
             'input_type'        => $inputType,
             'old_value'         => $request->getParam('old_value') !== '' ? $request->getParam('old_value') : null,
