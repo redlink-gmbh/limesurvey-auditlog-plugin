@@ -8,35 +8,40 @@ class UserAuditLogPlugin extends PluginBase
     static protected $description = 'Records a complete audit trail of user interactions with surveys for eCRF and GDPR compliance.';
 
     private const QUESTION_TYPES = [
-        '1' => 'array_dual_scale',
-        '5' => 'five_point_choice',
-        'A' => 'array_radio_five_point',
-        'B' => 'array_radio_ten_point',
-        'C' => 'array_radio_yes_no_uncertain',
-        'D' => 'date_time',
-        'E' => 'array_radio_increase_same_decrease',
-        'F' => 'array_radio',
-        'G' => 'gender',
-        'H' => 'array_radio_by_column',
-        'I' => 'language_switch',
-        'K' => 'multiple_numerical',
-        'L' => 'list_radio',
-        'M' => 'multiple_choice',
-        'N' => 'numerical',
-        'O' => 'list_with_comment',
-        'P' => 'multiple_choice_with_comments',
-        'Q' => 'multiple_short_text',
-        'R' => 'ranking',
-        'S' => 'short_text',
-        'T' => 'long_text',
-        'U' => 'huge_text',
-        'X' => 'boilerplate',
-        'Y' => 'yes_no',
-        '!' => 'list_dropdown',
-        ':' => 'array_numbers',
-        ';' => 'array_text',
-        '|' => 'file_upload',
-        '*' => 'equation',
+        // single choice
+        '5' => 'single-choice/five-point-choice',
+        'L' => 'single-choice/list-radio',
+        'O' => 'single-choice/list-with-comment',
+        '!' => 'single-choice/list-dropdown',
+        // multiple choice
+        'M' => 'multiple-choice/multiple-choice',
+        'P' => 'multiple-choice/multiple-choice-with-comments',
+        // text question
+        'S' => 'text-question/short-text',
+        'T' => 'text-question/long-text',
+        'U' => 'text-question/huge-text',
+        'Q' => 'text-question/multiple-short-text',
+        // mask question
+        'D' => 'mask-question/date-time',
+        'G' => 'mask-question/gender',
+        'I' => 'mask-question/language-switch',
+        'K' => 'mask-question/multiple-numerical',
+        'N' => 'mask-question/numerical',
+        'R' => 'mask-question/ranking',
+        'Y' => 'mask-question/yes-no',
+        'X' => 'mask-question/boilerplate',
+        '*' => 'mask-question/equation',
+        '|' => 'mask-question/file-upload',
+        // array
+        '1' => 'array/dual-scale',
+        'A' => 'array/five-point-choice',
+        'B' => 'array/ten-point-choice',
+        'C' => 'array/yes-no-uncertain',
+        'E' => 'array/increase-same-decrease',
+        'F' => 'array/array',
+        'H' => 'array/by-column',
+        ':' => 'array/numbers',
+        ';' => 'array/text',
     ];
 
     public function init(): void
@@ -126,6 +131,15 @@ class UserAuditLogPlugin extends PluginBase
             'function' => 'logAnswerChange',
         ]);
         $stepJs = $step !== null ? (int) $step : 'null';
+
+        $fileUploadQids = array_map(
+            fn($q) => (int) $q->qid,
+            Question::model()->findAll(
+                'sid = :sid AND type = :type AND parent_qid = 0',
+                [':sid' => $surveyId, ':type' => '|']
+            )
+        );
+        $fileUploadQidsJs = json_encode($fileUploadQids);
 
         Yii::app()->clientScript->registerScript(
             'ualp_change_listener',
@@ -246,6 +260,35 @@ class UserAuditLogPlugin extends PluginBase
             configurable: true
         });
     });
+
+    // File upload questions store their data in a hidden input updated by LS's JS.
+    // Hidden inputs are excluded from the generic override above, so patch them here.
+    var fileUploadQids = {$fileUploadQidsJs};
+    if (fileUploadQids.length) {
+        \$('input[type="hidden"]').each(function () {
+            var el = this;
+            if (!el.name) return;
+            var parsed = parseName(el.name);
+            // Only target the base field (no sub/col suffix) for known file upload QIDs.
+            if (!parsed || fileUploadQids.indexOf(parsed.qid) === -1 || parsed.sub !== null) return;
+            oldValues[el.name] = el.value !== '' ? el.value : null;
+            var proto = Object.getPrototypeOf(el);
+            var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+            if (!descriptor || !descriptor.set) return;
+            Object.defineProperty(el, 'value', {
+                get: function () { return descriptor.get.call(el); },
+                set: function (v) {
+                    descriptor.set.call(el, v);
+                    var newVal = v !== '' ? v : null;
+                    var oldVal = oldValues[el.name] !== undefined ? oldValues[el.name] : null;
+                    if (oldVal === newVal) return;
+                    oldValues[el.name] = newVal;
+                    sendChange(el, oldVal, newVal);
+                },
+                configurable: true
+            });
+        });
+    }
 
     \$(document).on('click', '[data-limesurvey-submit*="saveall"]', function () {
         var resolvedPage = resolvePageNumber();
@@ -399,15 +442,17 @@ JS
             }
         }
 
-        $inputType = $resolvedInputType
+        $specificType = $resolvedInputType
             ?? ($question
                 ? (self::QUESTION_TYPES[$question->type] ?? $question->type)
                 : $request->getParam('input_type'));
 
         $dualScale = $request->getParam('dual_scale');
         if ($dualScale !== null && $dualScale !== '') {
-            $inputType .= '_' . (int) $dualScale;
+            $specificType .= '-' . (int) $dualScale;
         }
+
+        $inputType = $specificType;
 
         $rawPage = $request->getParam('page_number');
         $this->writeLog([
