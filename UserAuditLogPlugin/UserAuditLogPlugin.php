@@ -417,7 +417,8 @@ JS
             'page_number'       => ($rawPage !== null && $rawPage !== '') ? (int) $rawPage : null,
             'group_id'          => (int) $request->getParam('group_id'),
             'question_id'       => $effectiveQid ?: null,
-            'sub_question_id'   => $subQid ?? ($resolvedInputType === 'ranking' && ($request->getParam('new_value') === '' || $request->getParam('new_value') === null) ? null : $rankSubQid),
+            'sub_question_id'   => $subQid,
+            'rank_position'     => $inputType === 'ranking' ? $rankSubQid : null,
             'column_id'         => $colQid,
             'input_type'        => $inputType,
             'old_value'         => $request->getParam('old_value') !== '' ? $request->getParam('old_value') : null,
@@ -451,6 +452,7 @@ JS
             'group_id'          => 'INTEGER',
             'question_id'       => 'INTEGER',
             'sub_question_id'   => 'INTEGER',
+            'rank_position'     => 'INTEGER',
             'column_id'         => 'INTEGER',
             'input_type'        => 'VARCHAR(50)',
             'old_value'         => 'TEXT',
@@ -477,6 +479,10 @@ JS
         if (!isset($schema->columns['column_id'])) {
             $db->createCommand()->addColumn($table, 'column_id', 'INTEGER');
         }
+
+        if (!isset($schema->columns['rank_position'])) {
+            $db->createCommand()->addColumn($table, 'rank_position', 'INTEGER');
+        }
     }
 
     private function writeLog(array $data): void
@@ -497,6 +503,7 @@ JS
                     'group_id'          => $data['group_id'] ?? null,
                     'question_id'       => $data['question_id'] ?? null,
                     'sub_question_id'   => $data['sub_question_id'] ?? null,
+                    'rank_position'     => $data['rank_position'] ?? null,
                     'column_id'         => $data['column_id'] ?? null,
                     'input_type'        => $data['input_type'] ?? null,
                     'old_value'         => $data['old_value'] ?? null,
