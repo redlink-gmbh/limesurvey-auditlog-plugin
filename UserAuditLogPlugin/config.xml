@@ -12,6 +12,6 @@
         <description>Records a complete audit trail of user interactions with surveys for eCRF and GDPR compliance.</description>
     </metadata>
     <compatibility>
-        <version>6.0</version>
+        <version>6</version>
     </compatibility>
 </config>
