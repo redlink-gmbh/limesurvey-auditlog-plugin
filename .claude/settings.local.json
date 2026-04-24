@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.limesurvey.org)",
+      "WebSearch",
+      "WebFetch(domain:forums.limesurvey.org)"
+    ]
+  }
+}

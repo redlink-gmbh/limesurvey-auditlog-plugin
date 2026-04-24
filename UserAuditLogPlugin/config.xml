@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+    <metadata>
+        <name>UserAuditLogPlugin</name>
+        <type>plugin</type>
+        <creationDate>2026-04-22</creationDate>
+        <lastUpdate>2026-04-22</lastUpdate>
+        <author>Redlink GmbH</author>
+        <authorUrl>https://redlink.at</authorUrl>
+        <license>MIT</license>
+        <version>1.0.0</version>
+        <description>Records a complete audit trail of user interactions with surveys for eCRF and GDPR compliance.</description>
+    </metadata>
+    <compatibility>
+        <version>6</version>
+    </compatibility>
+</config>
