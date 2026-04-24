@@ -30,7 +30,7 @@ jobs:
           fi
 
       - name: Package plugin
-        run: bash UserAuditLogPlugin/build.sh "${{ github.workspace }}/UserAuditLogPlugin" "${{ github.workspace }}/dist"
+        run: bash scripts/build.sh "${{ github.workspace }}/UserAuditLogPlugin" "${{ github.workspace }}/dist"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
