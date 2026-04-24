@@ -2,24 +2,31 @@
 set -euo pipefail
 
 PLUGIN_NAME="UserAuditLogPlugin"
-DIST_DIR="dist"
+PLUGIN_DIR="${1:-$PLUGIN_NAME}"
+DIST_DIR="${2:-dist}"
 OUT="$DIST_DIR/$PLUGIN_NAME.zip"
 
 mkdir -p "$DIST_DIR"
 rm -f "$OUT"
 
-python3 -c "
-import zipfile, os, sys
+python3 - "$PLUGIN_DIR" "$OUT" <<'PY'
+import os
+import sys
+import zipfile
 
-plugin = sys.argv[1]
-out    = sys.argv[2]
+plugin_dir = sys.argv[1]
+out = sys.argv[2]
 
-with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
-    for root, dirs, files in os.walk(plugin):
+if not os.path.isdir(plugin_dir):
+    raise SystemExit(f"Plugin directory does not exist: {plugin_dir}")
+
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    for root, dirs, files in os.walk(plugin_dir):
+        dirs[:] = [d for d in dirs if d not in {".git", "dist"}]
         for file in files:
             filepath = os.path.join(root, file)
-            arcname  = os.path.relpath(filepath, plugin)
+            arcname = os.path.relpath(filepath, plugin_dir)
             z.write(filepath, arcname)
 
-print('Built: ' + out)
-" "$PLUGIN_NAME" "$OUT"
+print(f"Built: {out}")
+PY
