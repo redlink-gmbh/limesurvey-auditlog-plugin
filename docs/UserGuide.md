@@ -35,7 +35,7 @@ From this point on, all user interactions (page loads, answer changes, submissio
 
 ## 3. Force authenticated access (optional)
 
-If participants must be logged in as a LimeSurvey user before they can fill out a survey, install the companion plugin [AuthenticatedSurveys](https://github.com/auth-it-center/limesurvey-authenticated-surveys):
+If participants must be logged in as a LimeSurvey user before they can fill out a survey, install the companion plugin [AuthenticatedSurveys Fork](https://github.com/redlink-gmbh/limesurvey-authenticated-surveys):
 
 1. Download and copy the `AuthenticatedSurveys/` directory into your LimeSurvey `plugins/` folder.
 2. Activate it via **Admin → Plugins** or from the terminal:
