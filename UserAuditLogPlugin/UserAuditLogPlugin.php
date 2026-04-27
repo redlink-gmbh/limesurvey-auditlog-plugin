@@ -438,7 +438,7 @@ JS
                 $rankPosition      = (int) substr((string) $qid, strlen((string) $rankQid));
                 $effectiveQid      = $rankQid;
                 $rankSubQid        = $rankPosition ?: $qid;
-                $resolvedInputType = 'ranking';
+                $resolvedInputType = 'mask-question/ranking';
             }
         }
 
@@ -463,7 +463,7 @@ JS
             'group_id'          => (int) $request->getParam('group_id'),
             'question_id'       => $effectiveQid ?: null,
             'sub_question_id'   => $subQid,
-            'rank_position'     => $inputType === 'ranking' ? $rankSubQid : null,
+            'rank_position'     => ($inputType === 'mask-question/ranking' && $request->getParam('new_value') !== '') ? $rankSubQid : null,
             'column_id'         => $colQid,
             'input_type'        => $inputType,
             'old_value'         => $request->getParam('old_value') !== '' ? $request->getParam('old_value') : null,
