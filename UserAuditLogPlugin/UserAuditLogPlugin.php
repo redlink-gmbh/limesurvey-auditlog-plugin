@@ -366,80 +366,90 @@ JS
         $subQid = null;
         $colQid = null;
 
-        if ($subRaw) {
-            $sub = Question::model()->find(
-                'parent_qid = :p AND title = :t AND scale_id = 0',
-                [':p' => $qid, ':t' => $subRaw]
-            );
-            $subQid = $sub ? (int) $sub->qid : null;
+        try {
+            if ($subRaw) {
+                $sub = Question::model()->find(
+                    'parent_qid = :p AND title = :t AND scale_id = 0',
+                    [':p' => $qid, ':t' => $subRaw]
+                );
+                $subQid = $sub ? (int) $sub->qid : null;
+            }
+
+            if ($colRaw) {
+                $col = Question::model()->find(
+                    'parent_qid = :p AND title = :t AND scale_id = 1',
+                    [':p' => $qid, ':t' => $colRaw]
+                );
+                $colQid = $col ? (int) $col->qid : null;
+            }
+        } catch (Exception $e) {
+            error_log('[UALP] sub/col question lookup ERROR: ' . $e->getMessage());
         }
 
-        if ($colRaw) {
-            $col = Question::model()->find(
-                'parent_qid = :p AND title = :t AND scale_id = 1',
-                [':p' => $qid, ':t' => $colRaw]
-            );
-            $colQid = $col ? (int) $col->qid : null;
-        }
-
-        $question    = $qid ? Question::model()->findByPk($qid) : null;
+        $question    = null;
         $effectiveQid = $qid;
         $rankSubQid   = null;
-
-        // Sub-questions (e.g. ranking positions) may be excluded by the model's
-        // default scope; resolve the parent question and restructure identifiers
-        // so question_id = parent qid, sub_question_id = rank-position qid.
-        if (!$question && $qid) {
-            $parentQid = (int) Yii::app()->db->createCommand()
-                ->select('parent_qid')
-                ->from(Yii::app()->db->tablePrefix . 'questions')
-                ->where('qid = :qid', [':qid' => $qid])
-                ->queryScalar();
-            if ($parentQid) {
-                $question     = Question::model()->findByPk($parentQid);
-                $effectiveQid = $parentQid;
-                $rankSubQid   = $qid;
-            }
-        }
-
-        // Fallback 2: ranking questions encode an answer ID (aid) in the field name rather
-        // than a question ID. Look up the parent qid via lime_answers.
-        if (!$question && $qid) {
-            $answerQid = (int) Yii::app()->db->createCommand()
-                ->select('qid')
-                ->from(Yii::app()->db->tablePrefix . 'answers')
-                ->where('aid = :aid', [':aid' => $qid])
-                ->queryScalar();
-            if ($answerQid) {
-                $question     = Question::model()->findByPk($answerQid);
-                $effectiveQid = $answerQid;
-                $rankSubQid   = $qid;
-            }
-        }
-
-        // Fallback 3: ranking field name IDs are dynamically generated and exist in neither
-        // lime_questions nor lime_answers. Find the ranking question (type='R') in the same
-        // survey+group via raw SQL and treat the submitted qid as a ranked-item sub-identifier.
         $resolvedInputType = null;
-        if (!$question && $qid) {
-            $gidParam = (int) $request->getParam('group_id');
-            $rankQid  = (int) Yii::app()->db->createCommand()
-                ->select('qid')
-                ->from(Yii::app()->db->tablePrefix . 'questions')
-                ->where('sid = :sid AND gid = :gid AND type = :type AND parent_qid = 0', [
-                    ':sid'  => $surveyId,
-                    ':gid'  => $gidParam,
-                    ':type' => 'R',
-                ])
-                ->queryScalar();
-            if ($rankQid) {
-                // Dynamic field ID = parentQid . rankPosition (e.g. 10241 = qid 1024, position 1).
-                // Strip the parent prefix to get a human-readable rank position (1, 2, 3…).
-                $rankPosition      = (int) substr((string) $qid, strlen((string) $rankQid));
-                $effectiveQid      = $rankQid;
-                $rankSubQid        = $rankPosition ?: $qid;
-                $resolvedInputType = 'ranking';
+
+        try {
+            $question = $qid ? Question::model()->findByPk($qid) : null;
+
+            // Sub-questions (e.g. ranking positions) may be excluded by the model's
+            // default scope; resolve the parent question and restructure identifiers
+            // so question_id = parent qid, sub_question_id = rank-position qid.
+            if (!$question && $qid) {
+                $parentQid = (int) Yii::app()->db->createCommand()
+                    ->select('parent_qid')
+                    ->from(Yii::app()->db->tablePrefix . 'questions')
+                    ->where('qid = :qid', [':qid' => $qid])
+                    ->queryScalar();
+                if ($parentQid) {
+                    $question     = Question::model()->findByPk($parentQid);
+                    $effectiveQid = $parentQid;
+                    $rankSubQid   = $qid;
+                }
             }
+
+            // Fallback 2: ranking questions encode an answer ID (aid) in the field name rather
+            // than a question ID. Look up the parent qid via lime_answers.
+            if (!$question && $qid) {
+                $answerQid = (int) Yii::app()->db->createCommand()
+                    ->select('qid')
+                    ->from(Yii::app()->db->tablePrefix . 'answers')
+                    ->where('aid = :aid', [':aid' => $qid])
+                    ->queryScalar();
+                if ($answerQid) {
+                    $question     = Question::model()->findByPk($answerQid);
+                    $effectiveQid = $answerQid;
+                    $rankSubQid   = $qid;
+                }
+            }
+
+            // Fallback 3: ranking field name IDs are dynamically generated and exist in neither
+            // lime_questions nor lime_answers. Find the ranking question (type='R') in the same
+            // survey+group via raw SQL and treat the submitted qid as a ranked-item sub-identifier.
+            if (!$question && $qid) {
+                $gidParam = (int) $request->getParam('group_id');
+                $rankQid  = (int) Yii::app()->db->createCommand()
+                    ->select('qid')
+                    ->from(Yii::app()->db->tablePrefix . 'questions')
+                    ->where('sid = :sid AND gid = :gid AND type = :type AND parent_qid = 0', [
+                        ':sid'  => $surveyId,
+                        ':gid'  => $gidParam,
+                        ':type' => 'R',
+                    ])
+                    ->queryScalar();
+                if ($rankQid) {
+                    // Dynamic field ID = parentQid . rankPosition (e.g. 10241 = qid 1024, position 1).
+                    // Strip the parent prefix to get a human-readable rank position (1, 2, 3…).
+                    $rankPosition      = (int) substr((string) $qid, strlen((string) $rankQid));
+                    $effectiveQid      = $rankQid;
+                    $rankSubQid        = $rankPosition ?: $qid;
+                    $resolvedInputType = 'mask-question/ranking';
+                }
+            }
+        } catch (Exception $e) {
+            error_log('[UALP] question resolution ERROR: ' . $e->getMessage());
         }
 
         $specificType = $resolvedInputType
@@ -463,7 +473,7 @@ JS
             'group_id'          => (int) $request->getParam('group_id'),
             'question_id'       => $effectiveQid ?: null,
             'sub_question_id'   => $subQid,
-            'rank_position'     => $inputType === 'ranking' ? $rankSubQid : null,
+            'rank_position'     => ($inputType === 'mask-question/ranking' && $request->getParam('new_value') !== '') ? $rankSubQid : null,
             'column_id'         => $colQid,
             'input_type'        => $inputType,
             'old_value'         => $request->getParam('old_value') !== '' ? $request->getParam('old_value') : null,
@@ -485,29 +495,33 @@ JS
             return;
         }
 
-        $db->createCommand()->createTable($table, [
-            'id'                => 'BIGSERIAL PRIMARY KEY',
-            'created_at'        => 'TIMESTAMPTZ NOT NULL DEFAULT NOW()',
-            'survey_id'         => 'INTEGER NOT NULL',
-            'participant_token' => 'VARCHAR(255)',
-            'oauth_user_id'     => 'VARCHAR(255)',
-            'oauth_username'    => 'VARCHAR(255)',
-            'event_type'        => 'VARCHAR(50) NOT NULL',
-            'page_number'       => 'INTEGER',
-            'group_id'          => 'INTEGER',
-            'question_id'       => 'INTEGER',
-            'sub_question_id'   => 'INTEGER',
-            'rank_position'     => 'INTEGER',
-            'column_id'         => 'INTEGER',
-            'input_type'        => 'VARCHAR(50)',
-            'old_value'         => 'TEXT',
-            'new_value'         => 'TEXT',
-            'session_id'        => 'VARCHAR(255)',
-            'ip_address'        => 'VARCHAR(45)',
-        ]);
+        try {
+            $db->createCommand()->createTable($table, [
+                'id'                => 'BIGSERIAL PRIMARY KEY',
+                'created_at'        => 'TIMESTAMPTZ NOT NULL DEFAULT NOW()',
+                'survey_id'         => 'INTEGER NOT NULL',
+                'participant_token' => 'VARCHAR(255)',
+                'oauth_user_id'     => 'VARCHAR(255)',
+                'oauth_username'    => 'VARCHAR(255)',
+                'event_type'        => 'VARCHAR(50) NOT NULL',
+                'page_number'       => 'INTEGER',
+                'group_id'          => 'INTEGER',
+                'question_id'       => 'INTEGER',
+                'sub_question_id'   => 'INTEGER',
+                'rank_position'     => 'INTEGER',
+                'column_id'         => 'INTEGER',
+                'input_type'        => 'VARCHAR(50)',
+                'old_value'         => 'TEXT',
+                'new_value'         => 'TEXT',
+                'session_id'        => 'VARCHAR(255)',
+                'ip_address'        => 'VARCHAR(45)',
+            ]);
 
-        foreach (['survey_id', 'created_at', 'oauth_user_id', 'participant_token', 'event_type'] as $col) {
-            $db->createCommand()->createIndex("idx_ual_{$col}", $table, $col);
+            foreach (['survey_id', 'created_at', 'oauth_user_id', 'participant_token', 'event_type'] as $col) {
+                $db->createCommand()->createIndex("idx_ual_{$col}", $table, $col);
+            }
+        } catch (Exception $e) {
+            error_log('[UALP] ensureTable ERROR: ' . $e->getMessage());
         }
     }
 
@@ -521,12 +535,16 @@ JS
             return;
         }
 
-        if (!isset($schema->columns['column_id'])) {
-            $db->createCommand()->addColumn($table, 'column_id', 'INTEGER');
-        }
+        try {
+            if (!isset($schema->columns['column_id'])) {
+                $db->createCommand()->addColumn($table, 'column_id', 'INTEGER');
+            }
 
-        if (!isset($schema->columns['rank_position'])) {
-            $db->createCommand()->addColumn($table, 'rank_position', 'INTEGER');
+            if (!isset($schema->columns['rank_position'])) {
+                $db->createCommand()->addColumn($table, 'rank_position', 'INTEGER');
+            }
+        } catch (Exception $e) {
+            error_log('[UALP] ensureColumns ERROR: ' . $e->getMessage());
         }
     }
 
