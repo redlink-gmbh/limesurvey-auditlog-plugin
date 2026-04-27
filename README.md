@@ -31,3 +31,4 @@ Query `lime_user_audit_log` filtered by `survey_id` and `participant_token` — 
 
 - [Audit Log Specification](docs/AuditLogSpecification.md) — schema design decisions, storage approach, and event types
 - [Question Type Reference](docs/AuditlogQuestionTypes.md) — how each LimeSurvey question type is represented in the log table
+- [User Guide](docs/UserGuide.md) — how to activate the plugin, enable logging per survey, and access the audit log
