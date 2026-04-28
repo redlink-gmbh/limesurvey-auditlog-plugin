@@ -77,5 +77,3 @@ Access is triggered by a legal/regulatory requirement or a data subject request.
 4. Resolve the participant token to a person via lime_tokens_{surveyId} if identity confirmation is required.
 
 ---
-
-@westei this should cover an cross-verify everything that is listed in this ticket
