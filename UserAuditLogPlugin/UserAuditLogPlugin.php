@@ -162,6 +162,14 @@ class UserAuditLogPlugin extends PluginBase
     var pageNumber = {$stepJs};
     var endpoint   = "{$endpointUrl}";
 
+    if (typeof $ === 'undefined') {
+        var errDiv = document.createElement('div');
+        errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:12px;z-index:9999;text-align:center;font-size:14px;';
+        errDiv.textContent = 'Audit logging is unavailable for this session because a required component (jQuery) failed to load. Please reload the page to restore it. If this message appears again after reloading, contact your survey administrator.';
+        document.body.appendChild(errDiv);
+        return;
+    }
+
     function resolvePageNumber() {
         if (pageNumber !== null) return pageNumber;
         var el = document.getElementById('thisstep') || document.querySelector('input[name="thisstep"]');
