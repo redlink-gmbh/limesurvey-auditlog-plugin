@@ -56,7 +56,7 @@ private function sendJsonOk(): void
 }
 ```
 
-- [ ] Done
+- [x] Done
 
 ---
 
@@ -76,7 +76,7 @@ Yii::log('[UALP] ... ERROR: ' . $e->getMessage(), 'error', 'application.plugins.
 
 Affected methods: `newDirectRequest` (×2), `ensureTable`, `ensureColumns`, `writeLog`.
 
-- [ ] Done
+- [x] Done
 
 ---
 
@@ -92,7 +92,7 @@ private function parsePageNumber($raw): ?int
 }
 ```
 
-- [ ] Done
+- [x] Done
 
 ---
 
@@ -120,4 +120,4 @@ if (typeof $ === 'undefined') {
 
 Add a short note to `docs/UserGuide.md` (or `README.md`) that `ip_address` is captured via `$_SERVER['REMOTE_ADDR']`. Behind a reverse proxy this will always be the proxy IP, not the client IP. Administrators should configure `X-Forwarded-For` trust at the web server level if accurate client IPs are required.
 
-- [ ] Done
+- [x] Done

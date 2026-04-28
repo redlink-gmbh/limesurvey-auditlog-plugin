@@ -424,12 +424,9 @@ JS
                 'survey_id'         => $surveyId,
                 'participant_token' => $token,
                 'event_type'        => 'survey_save',
-                'page_number'       => ($rawPage !== null && $rawPage !== '') ? (int) $rawPage : null,
+                'page_number'       => $this->parsePageNumber($rawPage),
             ]);
-            http_response_code(200);
-            header('Content-Type: application/json');
-            echo json_encode(['status' => 'ok']);
-            die();
+            $this->sendJsonOk();
         }
 
         $qid    = (int) $request->getParam('question_id');
@@ -455,7 +452,7 @@ JS
                 $colQid = $col ? (int) $col->qid : null;
             }
         } catch (Exception $e) {
-            error_log('[UALP] sub/col question lookup ERROR: ' . $e->getMessage());
+            Yii::log('[UALP] sub/col question lookup ERROR: ' . $e->getMessage(), 'error', 'application.plugins.UserAuditLogPlugin');
         }
 
         $question          = null;
@@ -515,7 +512,7 @@ JS
                 }
             }
         } catch (Exception $e) {
-            error_log('[UALP] question resolution ERROR: ' . $e->getMessage());
+            Yii::log('[UALP] question resolution ERROR: ' . $e->getMessage(), 'error', 'application.plugins.UserAuditLogPlugin');
         }
 
         $specificType = $resolvedInputType
@@ -535,7 +532,7 @@ JS
             'survey_id'         => $surveyId,
             'participant_token' => $token,
             'event_type'        => 'answer_change',
-            'page_number'       => ($rawPage !== null && $rawPage !== '') ? (int) $rawPage : null,
+            'page_number'       => $this->parsePageNumber($rawPage),
             'group_id'          => (int) $request->getParam('group_id'),
             'question_id'       => $effectiveQid ?: null,
             'sub_question_id'   => $subQid,
@@ -546,10 +543,7 @@ JS
             'new_value'         => $request->getParam('new_value') !== '' ? $request->getParam('new_value') : null,
         ]);
 
-        http_response_code(200);
-        header('Content-Type: application/json');
-        echo json_encode(['status' => 'ok']);
-        die();
+        $this->sendJsonOk();
     }
 
     /** Creates the audit log table with all columns and indexes if it does not yet exist. */
@@ -588,7 +582,7 @@ JS
                 $db->createCommand()->createIndex("idx_ual_{$col}", $table, $col);
             }
         } catch (Exception $e) {
-            error_log('[UALP] ensureTable ERROR: ' . $e->getMessage());
+            Yii::log('[UALP] ensureTable ERROR: ' . $e->getMessage(), 'error', 'application.plugins.UserAuditLogPlugin');
         }
     }
 
@@ -612,7 +606,7 @@ JS
                 $db->createCommand()->addColumn($table, 'rank_position', 'INTEGER');
             }
         } catch (Exception $e) {
-            error_log('[UALP] ensureColumns ERROR: ' . $e->getMessage());
+            Yii::log('[UALP] ensureColumns ERROR: ' . $e->getMessage(), 'error', 'application.plugins.UserAuditLogPlugin');
         }
     }
 
@@ -645,7 +639,22 @@ JS
                 ]
             );
         } catch (Exception $e) {
-            error_log('[UALP] writeLog ERROR: ' . $e->getMessage());
+            Yii::log('[UALP] writeLog ERROR: ' . $e->getMessage(), 'error', 'application.plugins.UserAuditLogPlugin');
         }
+    }
+
+    /** Sends a 200 JSON response and terminates the request. */
+    private function sendJsonOk(): void
+    {
+        http_response_code(200);
+        header('Content-Type: application/json');
+        echo json_encode(['status' => 'ok']);
+        die();
+    }
+
+    /** Casts a raw page number request param to int, or null if absent or empty. */
+    private function parsePageNumber($raw): ?int
+    {
+        return ($raw !== null && $raw !== '') ? (int) $raw : null;
     }
 }
