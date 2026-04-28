@@ -238,6 +238,16 @@ class UserAuditLogPlugin extends PluginBase
         }
     });
 
+    // When a mask-question input receives focus, LimeSurvey's mask plugin reformats
+    // the stored value (e.g. "42" → "42.00"), which triggers our setter. That setter
+    // fire is not a user-intended change, so suppress it while the element is focusing.
+    \$(document).on('focus', 'input', function () {
+        var el = this;
+        if (!el.name || !parseName(el.name)) return;
+        el._ualp_focusing = true;
+        setTimeout(function () { el._ualp_focusing = false; }, 0);
+    });
+
     \$('input').each(function () {
         if (!this.name || !parseName(this.name)) return;
         if (this.type === 'hidden') return;
@@ -255,6 +265,9 @@ class UserAuditLogPlugin extends PluginBase
                 var oldVal = oldValues[el.name] !== undefined ? oldValues[el.name] : null;
                 if (oldVal === newVal) return;
                 oldValues[el.name] = newVal;
+                // Suppress logging for mask-plugin reformatting triggered on focus;
+                // only the user's actual value change (fired on blur/change) should be logged.
+                if (el._ualp_focusing) return;
                 sendChange(el, oldVal, newVal);
             },
             configurable: true
