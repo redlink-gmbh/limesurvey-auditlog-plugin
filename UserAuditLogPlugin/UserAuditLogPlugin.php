@@ -274,6 +274,32 @@ class UserAuditLogPlugin extends PluginBase
         });
     });
 
+    // Intercept programmatic `checked` changes on checkboxes (type-P multiple-choice-with-comments
+    // auto-checks the checkbox when the user types into the comment field, without firing a `change`
+    // event). setTimeout(0) defers so a real user-click `change` event can update oldValues first —
+    // if it already did, oldValues matches and we skip; otherwise we log the missed state change.
+    \$('input[type="checkbox"]').each(function () {
+        if (!this.name || !parseName(this.name)) return;
+        var el = this;
+        var proto = Object.getPrototypeOf(el);
+        var checkedDescriptor = Object.getOwnPropertyDescriptor(proto, 'checked');
+        if (!checkedDescriptor || !checkedDescriptor.set) return;
+        Object.defineProperty(el, 'checked', {
+            get: function () { return checkedDescriptor.get.call(el); },
+            set: function (v) {
+                checkedDescriptor.set.call(el, v);
+                setTimeout(function () {
+                    var newVal = (el.checked && el.value !== '') ? el.value : null;
+                    var oldVal = oldValues[el.name] !== undefined ? oldValues[el.name] : null;
+                    if (oldVal === newVal) return;
+                    oldValues[el.name] = newVal;
+                    sendChange(el, oldVal, newVal);
+                }, 0);
+            },
+            configurable: true
+        });
+    });
+
     // File upload questions store their data in a hidden input updated by LS's JS.
     // Hidden inputs are excluded from the generic override above, so patch them here.
     var fileUploadQids = {$fileUploadQidsJs};
