@@ -94,3 +94,11 @@ mysql -u <user> -p <database> -e \
 ### Via LimeSurvey admin UI (datatable)
 
 The plugin provides a built-in datatable view per survey. Go to **Survey → Plugin actions → UserAuditLogPlugin** to browse and filter the log entries without leaving the admin UI.
+
+---
+
+## 5. Notes on data collection
+
+### IP address and reverse proxies
+
+The `ip_address` column is populated from `$_SERVER['REMOTE_ADDR']`. When LimeSurvey runs behind a reverse proxy (e.g. nginx, Apache, a load balancer), this will always be the proxy's IP address rather than the actual client IP. If accurate client IPs are required, configure your web server to trust and forward the `X-Forwarded-For` header at the infrastructure level before deploying the plugin in production.
