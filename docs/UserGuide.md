@@ -102,3 +102,7 @@ The plugin provides a built-in datatable view per survey. Go to **Survey → Plu
 ### IP address and reverse proxies
 
 The `ip_address` column is populated from `$_SERVER['REMOTE_ADDR']`. When LimeSurvey runs behind a reverse proxy (e.g. nginx, Apache, a load balancer), this will always be the proxy's IP address rather than the actual client IP. If accurate client IPs are required, configure your web server to trust and forward the `X-Forwarded-For` header at the infrastructure level before deploying the plugin in production.
+
+### Date/time fields and language switching
+
+The plugin logs the date value exactly as the datepicker has formatted it at the moment of selection. If a respondent **switches the survey language after entering a date**, LimeSurvey will change the active date format (e.g. from `d.m.Y` to `m/d/Y`) but will not reformat the already-entered value. LimeSurvey's own form validation will then reject that value when the respondent tries to navigate or submit. This is a LimeSurvey core limitation — the plugin neither causes nor can fix it. The workaround is to avoid placing a language-switch question on the same survey page as a date/time question.

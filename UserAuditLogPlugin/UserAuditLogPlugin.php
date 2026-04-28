@@ -239,6 +239,7 @@ class UserAuditLogPlugin extends PluginBase
         if (!el.name) return;
         var parsed = parseName(el.name);
         if (!parsed) return;
+        if (dateTimeQids.indexOf(parsed.qid) !== -1) return;
         var newVal = getValue(el);
         var oldVal = oldValues[el.name] !== undefined ? oldValues[el.name] : null;
         if (oldVal === newVal) return;
@@ -350,7 +351,7 @@ class UserAuditLogPlugin extends PluginBase
     // Date/time: use direct element listeners instead of setter (datepicker uses triggerHandler, no bubbling).
     if (dateTimeQids.length) {
         \$('input').each(function () {
-            if (!this.name) return;
+            if (!this.name || this.type === 'hidden') return;
             var parsed = parseName(this.name);
             if (!parsed || dateTimeQids.indexOf(parsed.qid) === -1) return;
             var el = this;
@@ -364,7 +365,6 @@ class UserAuditLogPlugin extends PluginBase
             \$(el).off('.ualp-dt').on('dp.change.ualp-dt', logDateChange);
             \$(el).parent().off('.ualp-dt').on('dp.change.ualp-dt', logDateChange);
             \$(el).on('change.ualp-dt', logDateChange);
-            \$(el).on('blur.ualp-dt', logDateChange);
         });
     }
 
