@@ -445,11 +445,15 @@ JS
 
         try {
             if ($subRaw) {
-                $sub = Question::model()->find(
-                    'parent_qid = :p AND title = :t AND scale_id = 0',
-                    [':p' => $qid, ':t' => $subRaw]
-                );
-                $subQid = $sub ? (int) $sub->qid : null;
+                // Strip LimeSurvey's trailing "comment" suffix so "SQ001comment" resolves to sub-question "SQ001".
+                $subLookup = preg_replace('/comment$/', '', $subRaw);
+                if ($subLookup !== '') {
+                    $sub = Question::model()->find(
+                        'parent_qid = :p AND title = :t AND scale_id = 0',
+                        [':p' => $qid, ':t' => $subLookup]
+                    );
+                    $subQid = $sub ? (int) $sub->qid : null;
+                }
             }
 
             if ($colRaw) {
