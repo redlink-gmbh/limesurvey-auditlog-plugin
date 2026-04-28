@@ -141,10 +141,25 @@ class UserAuditLogPlugin extends PluginBase
         );
         $fileUploadQidsJs = json_encode($fileUploadQids);
 
+        $dateTimeQids = array_map(
+            fn($q) => (int) $q->qid,
+            Question::model()->findAll(
+                'sid = :sid AND type = :type AND parent_qid = 0',
+                [':sid' => $surveyId, ':type' => 'D']
+            )
+        );
+        $dateTimeQidsJs = json_encode($dateTimeQids);
+
         Yii::app()->clientScript->registerScript(
             'ualp_change_listener',
             <<<JS
 (function () {
+    // Guard: LimeSurvey re-executes scripts after certain AJAX operations (e.g.
+    // file upload). Running a second time would reset oldValues and could add
+    // duplicate handlers — bail out immediately if already initialised.
+    if (window._ualp_init_{$surveyId}) return;
+    window._ualp_init_{$surveyId} = true;
+
     var surveyId   = {$surveyId};
     var pageNumber = {$stepJs};
     var endpoint   = "{$endpointUrl}";
@@ -214,7 +229,7 @@ class UserAuditLogPlugin extends PluginBase
         });
     }
 
-    \$(document).on('change', 'input, select, textarea', function () {
+    \$(document).off('change.ualp').on('change.ualp', 'input, select, textarea', function () {
         var el = this;
         if (!el.name) return;
         var parsed = parseName(el.name);
@@ -241,17 +256,23 @@ class UserAuditLogPlugin extends PluginBase
     // When a mask-question input receives focus, LimeSurvey's mask plugin reformats
     // the stored value (e.g. "42" → "42.00"), which triggers our setter. That setter
     // fire is not a user-intended change, so suppress it while the element is focusing.
-    \$(document).on('focus', 'input', function () {
+    \$(document).off('focus.ualp').on('focus.ualp', 'input', function () {
         var el = this;
         if (!el.name || !parseName(el.name)) return;
         el._ualp_focusing = true;
         setTimeout(function () { el._ualp_focusing = false; }, 0);
     });
 
+    var dateTimeQids = {$dateTimeQidsJs};
+
     \$('input').each(function () {
         if (!this.name || !parseName(this.name)) return;
         if (this.type === 'hidden') return;
         var el = this;
+        var parsed = parseName(el.name);
+        // Skip date/time inputs — the setter breaks datepicker-internal validation.
+        // They are handled in the separate block below.
+        if (parsed && dateTimeQids.indexOf(parsed.qid) !== -1) return;
         var proto = Object.getPrototypeOf(el);
         var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
         if (!descriptor || !descriptor.set) return;
@@ -329,7 +350,33 @@ class UserAuditLogPlugin extends PluginBase
         });
     }
 
-    \$(document).on('click', '[data-limesurvey-submit*="saveall"]', function () {
+    // ── Date/time: completely separate handler ──────────────────────────────
+    // Setter is skipped above to avoid breaking datepicker-internal validation.
+    // Direct element listeners are used instead of document delegation because
+    // LimeSurvey's datepicker uses triggerHandler (no bubbling). All bindings
+    // use the .ualp namespace so a second IIFE run (e.g. after file upload)
+    // removes the previous handlers before re-registering.
+    if (dateTimeQids.length) {
+        \$('input').each(function () {
+            if (!this.name) return;
+            var parsed = parseName(this.name);
+            if (!parsed || dateTimeQids.indexOf(parsed.qid) === -1) return;
+            var el = this;
+            function logDateChange() {
+                var newVal = el.value !== '' ? el.value : null;
+                var oldVal = oldValues[el.name] !== undefined ? oldValues[el.name] : null;
+                if (oldVal === newVal) return;
+                oldValues[el.name] = newVal;
+                sendChange(el, oldVal, newVal);
+            }
+            \$(el).off('.ualp-dt').on('dp.change.ualp-dt', logDateChange);
+            \$(el).parent().off('.ualp-dt').on('dp.change.ualp-dt', logDateChange);
+            \$(el).on('change.ualp-dt', logDateChange);
+            \$(el).on('blur.ualp-dt', logDateChange);
+        });
+    }
+
+    \$(document).off('click.ualp', '[data-limesurvey-submit*="saveall"]').on('click.ualp', '[data-limesurvey-submit*="saveall"]', function () {
         var resolvedPage = resolvePageNumber();
         var saveData = { survey_id: surveyId, event_type: 'survey_save' };
         if (resolvedPage !== null) saveData.page_number = resolvedPage;
