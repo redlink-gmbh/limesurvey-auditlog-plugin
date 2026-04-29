@@ -568,10 +568,22 @@ JS
             return;
         }
 
+        $driver = $db->getDriverName();
+        $idType = match ($driver) {
+            'pgsql'          => 'BIGSERIAL PRIMARY KEY',
+            'sqlsrv', 'dblib' => 'BIGINT IDENTITY(1,1) PRIMARY KEY',
+            default          => 'BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY',
+        };
+        $tsType = match ($driver) {
+            'pgsql'          => 'TIMESTAMPTZ NOT NULL DEFAULT NOW()',
+            'sqlsrv', 'dblib' => 'DATETIME2 NOT NULL DEFAULT GETDATE()',
+            default          => 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        };
+
         try {
             $db->createCommand()->createTable($table, [
-                'id'                => 'BIGSERIAL PRIMARY KEY',
-                'created_at'        => 'TIMESTAMPTZ NOT NULL DEFAULT NOW()',
+                'id'                => $idType,
+                'created_at'        => $tsType,
                 'survey_id'         => 'INTEGER NOT NULL',
                 'participant_token' => 'VARCHAR(255)',
                 'oauth_user_id'     => 'VARCHAR(255)',
