@@ -1,8 +1,4 @@
-### Conclusion
-
----
-
-The schema is defined and implementation-ready. The total research and decision validation is documented in #28 /cusstomPlugins/UserAuditLogPlugin/CONCEPT.md.
+### AuditLogSpecification
 
 ---
 
@@ -64,7 +60,7 @@ The schema is defined and implementation-ready. The total research and decision 
 ---
 
 #### Authentication enforcement — production setup
-Authentication enforcement is handled by the companion plugin [limesurvey-authenticated-surveys](https://github.com/auth-it-center/limesurvey-authenticated-surveys), which blocks unauthenticated access to surveys at the LimeSurvey level. UserAuditLogPlugin remains decoupled — it logs whoever is authenticated. In a correctly configured deployment, `oauth_user_id` / `oauth_username` will always be populated because unauthenticated users are redirected before reaching the survey. The two plugins are activated independently; our plugin degrades gracefully (logs null identity) if enforcement is ever disabled.
+Authentication enforcement is handled by the companion plugin [limesurvey-authenticated-surveys Fork](https://github.com/redlink-gmbh/limesurvey-authenticated-surveys), which blocks unauthenticated access to surveys at the LimeSurvey level. UserAuditLogPlugin remains decoupled — it logs whoever is authenticated. In a correctly configured deployment, `oauth_user_id` / `oauth_username` will always be populated because unauthenticated users are redirected before reaching the survey. The two plugins are activated independently; our plugin degrades gracefully (logs null identity) if enforcement is ever disabled.
 
 ---
 

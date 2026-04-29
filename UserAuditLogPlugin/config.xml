@@ -4,14 +4,17 @@
         <name>UserAuditLogPlugin</name>
         <type>plugin</type>
         <creationDate>2026-04-22</creationDate>
-        <lastUpdate>2026-04-22</lastUpdate>
+        <lastUpdate>2026-04-28</lastUpdate>
         <author>Redlink GmbH</author>
+        <authorEmail>office@redlink.at</authorEmail>
         <authorUrl>https://redlink.at</authorUrl>
+        <supportUrl>https://github.com/redlink-gmbh/limesurvey-auditlog-plugin/issues</supportUrl>
         <license>MIT</license>
         <version>1.0.0</version>
-        <description>Records a complete audit trail of user interactions with surveys for eCRF and GDPR compliance.</description>
+        <description><![CDATA[Records a complete audit trail of user interactions with surveys for eCRF and GDPR compliance.]]></description>
     </metadata>
     <compatibility>
         <version>6</version>
     </compatibility>
+    <updaters disabled="disabled"/>
 </config>

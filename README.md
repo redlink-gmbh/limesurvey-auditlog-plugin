@@ -32,3 +32,17 @@ Query `lime_user_audit_log` filtered by `survey_id` and `participant_token` — 
 - [Audit Log Specification](docs/AuditLogSpecification.md) — schema design decisions, storage approach, and event types
 - [Question Type Reference](docs/AuditlogQuestionTypes.md) — how each LimeSurvey question type is represented in the log table
 - [User Guide](docs/UserGuide.md) — how to activate the plugin, enable logging per survey, and access the audit log
+
+## Credits
+
+- Developed by [Redlink GmbH](https://redlink.at).
+- Core development by [Isabella Aigner](https://github.com/iaigner).
+
+Sponsored by [P2R – Prehab2Rehab](https://prehab2rehab.at)
+(FFG Project No. 5133089 — [projekte.ffg.at/projekt/5133089](https://projekte.ffg.at/projekt/5133089)).
+
+---
+
+## License
+
+MIT — see [LICENSE](https://opensource.org/license/mit) for details.

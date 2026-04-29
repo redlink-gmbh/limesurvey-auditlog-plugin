@@ -8,20 +8,16 @@ class UserAuditLogPlugin extends PluginBase
     static protected $description = 'Records a complete audit trail of user interactions with surveys for eCRF and GDPR compliance.';
 
     private const QUESTION_TYPES = [
-        // single choice
         '5' => 'single-choice/five-point-choice',
         'L' => 'single-choice/list-radio',
         'O' => 'single-choice/list-with-comment',
         '!' => 'single-choice/list-dropdown',
-        // multiple choice
         'M' => 'multiple-choice/multiple-choice',
         'P' => 'multiple-choice/multiple-choice-with-comments',
-        // text question
         'S' => 'text-question/short-text',
         'T' => 'text-question/long-text',
         'U' => 'text-question/huge-text',
         'Q' => 'text-question/multiple-short-text',
-        // mask question
         'D' => 'mask-question/date-time',
         'G' => 'mask-question/gender',
         'I' => 'mask-question/language-switch',
@@ -32,7 +28,6 @@ class UserAuditLogPlugin extends PluginBase
         'X' => 'mask-question/boilerplate',
         '*' => 'mask-question/equation',
         '|' => 'mask-question/file-upload',
-        // array
         '1' => 'array/dual-scale',
         'A' => 'array/five-point-choice',
         'B' => 'array/ten-point-choice',
@@ -44,6 +39,7 @@ class UserAuditLogPlugin extends PluginBase
         ';' => 'array/text',
     ];
 
+    /** Registers event hooks and ensures the database schema is up to date. */
     public function init(): void
     {
         $this->subscribe('beforeSurveyPage');
@@ -56,6 +52,7 @@ class UserAuditLogPlugin extends PluginBase
         $this->ensureColumns();
     }
 
+    /** Adds a per-survey activation toggle to the survey admin settings panel. */
     public function beforeSurveySettings(): void
     {
         $oEvent   = $this->event;
@@ -77,6 +74,7 @@ class UserAuditLogPlugin extends PluginBase
         ]);
     }
 
+    /** Persists per-survey plugin settings when the admin form is saved. */
     public function newSurveySettings(): void
     {
         $event    = $this->event;
@@ -87,12 +85,14 @@ class UserAuditLogPlugin extends PluginBase
         }
     }
 
+    /** Returns true if audit logging is enabled for the given survey. */
     private function isSurveyActive(int $surveyId): bool
     {
         $val = $this->get('active', 'Survey', $surveyId);
         return in_array($val, ['1', 1, true], true);
     }
 
+    /** Logs a page_load or survey_open event and injects the JS change listener. */
     public function beforeSurveyPage(): void
     {
         $surveyId = (int) $this->event->get('surveyId');
@@ -102,8 +102,8 @@ class UserAuditLogPlugin extends PluginBase
 
         $surveySession = Yii::app()->session['survey_' . $surveyId] ?? [];
         $token         = $surveySession['token'] ?? null;
-        $postThisstep = Yii::app()->request->getPost('thisstep', null);
-        $postMove     = Yii::app()->request->getPost('move', null);
+        $postThisstep  = Yii::app()->request->getPost('thisstep', null);
+        $postMove      = Yii::app()->request->getPost('move', null);
 
         $step = $this->event->get('step') ?? null;
 
@@ -117,7 +117,7 @@ class UserAuditLogPlugin extends PluginBase
                 $step = $ts;
             }
         }
-        $eventType     = ($step === null || (int) $step <= 0) ? 'survey_open' : 'page_load';
+        $eventType = ($step === null || (int) $step <= 0) ? 'survey_open' : 'page_load';
 
         $this->writeLog([
             'survey_id'         => $surveyId,
@@ -154,15 +154,21 @@ class UserAuditLogPlugin extends PluginBase
             'ualp_change_listener',
             <<<JS
 (function () {
-    // Guard: LimeSurvey re-executes scripts after certain AJAX operations (e.g.
-    // file upload). Running a second time would reset oldValues and could add
-    // duplicate handlers — bail out immediately if already initialised.
+    // Bail out if already initialised — LS re-executes scripts after AJAX events.
     if (window._ualp_init_{$surveyId}) return;
     window._ualp_init_{$surveyId} = true;
 
     var surveyId   = {$surveyId};
     var pageNumber = {$stepJs};
     var endpoint   = "{$endpointUrl}";
+
+    if (typeof $ === 'undefined') {
+        var errDiv = document.createElement('div');
+        errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:12px;z-index:9999;text-align:center;font-size:14px;';
+        errDiv.textContent = 'Audit logging is unavailable for this session because a required component (jQuery) failed to load. Please reload the page to restore it. If this message appears again after reloading, contact your survey administrator.';
+        document.body.appendChild(errDiv);
+        return;
+    }
 
     function resolvePageNumber() {
         if (pageNumber !== null) return pageNumber;
@@ -183,7 +189,6 @@ class UserAuditLogPlugin extends PluginBase
         if (el.type === 'checkbox' || el.type === 'radio') return (el.checked && el.value !== '') ? el.value : null;
         return el.value !== '' ? el.value : null;
     }
-
 
     var oldValues = {};
     \$('input, select, textarea').each(function () {
@@ -234,6 +239,7 @@ class UserAuditLogPlugin extends PluginBase
         if (!el.name) return;
         var parsed = parseName(el.name);
         if (!parsed) return;
+        if (dateTimeQids.indexOf(parsed.qid) !== -1) return;
         var newVal = getValue(el);
         var oldVal = oldValues[el.name] !== undefined ? oldValues[el.name] : null;
         if (oldVal === newVal) return;
@@ -253,9 +259,7 @@ class UserAuditLogPlugin extends PluginBase
         }
     });
 
-    // When a mask-question input receives focus, LimeSurvey's mask plugin reformats
-    // the stored value (e.g. "42" → "42.00"), which triggers our setter. That setter
-    // fire is not a user-intended change, so suppress it while the element is focusing.
+    // Suppress mask-plugin reformat on focus from being logged as a user change.
     \$(document).off('focus.ualp').on('focus.ualp', 'input', function () {
         var el = this;
         if (!el.name || !parseName(el.name)) return;
@@ -270,8 +274,7 @@ class UserAuditLogPlugin extends PluginBase
         if (this.type === 'hidden') return;
         var el = this;
         var parsed = parseName(el.name);
-        // Skip date/time inputs — the setter breaks datepicker-internal validation.
-        // They are handled in the separate block below.
+        // Skip date/time inputs — handled separately below to avoid breaking datepicker validation.
         if (parsed && dateTimeQids.indexOf(parsed.qid) !== -1) return;
         var proto = Object.getPrototypeOf(el);
         var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
@@ -286,8 +289,7 @@ class UserAuditLogPlugin extends PluginBase
                 var oldVal = oldValues[el.name] !== undefined ? oldValues[el.name] : null;
                 if (oldVal === newVal) return;
                 oldValues[el.name] = newVal;
-                // Suppress logging for mask-plugin reformatting triggered on focus;
-                // only the user's actual value change (fired on blur/change) should be logged.
+                // Skip mask-plugin reformat on focus — only log real user changes.
                 if (el._ualp_focusing) return;
                 sendChange(el, oldVal, newVal);
             },
@@ -295,10 +297,7 @@ class UserAuditLogPlugin extends PluginBase
         });
     });
 
-    // Intercept programmatic `checked` changes on checkboxes (type-P multiple-choice-with-comments
-    // auto-checks the checkbox when the user types into the comment field, without firing a `change`
-    // event). setTimeout(0) defers so a real user-click `change` event can update oldValues first —
-    // if it already did, oldValues matches and we skip; otherwise we log the missed state change.
+    // Intercept programmatic checked changes (type-P auto-checks without firing a change event).
     \$('input[type="checkbox"]').each(function () {
         if (!this.name || !parseName(this.name)) return;
         var el = this;
@@ -321,8 +320,7 @@ class UserAuditLogPlugin extends PluginBase
         });
     });
 
-    // File upload questions store their data in a hidden input updated by LS's JS.
-    // Hidden inputs are excluded from the generic override above, so patch them here.
+    // File uploads use hidden inputs excluded from the generic override above.
     var fileUploadQids = {$fileUploadQidsJs};
     if (fileUploadQids.length) {
         \$('input[type="hidden"]').each(function () {
@@ -350,15 +348,10 @@ class UserAuditLogPlugin extends PluginBase
         });
     }
 
-    // ── Date/time: completely separate handler ──────────────────────────────
-    // Setter is skipped above to avoid breaking datepicker-internal validation.
-    // Direct element listeners are used instead of document delegation because
-    // LimeSurvey's datepicker uses triggerHandler (no bubbling). All bindings
-    // use the .ualp namespace so a second IIFE run (e.g. after file upload)
-    // removes the previous handlers before re-registering.
+    // Date/time: use direct element listeners instead of setter (datepicker uses triggerHandler, no bubbling).
     if (dateTimeQids.length) {
         \$('input').each(function () {
-            if (!this.name) return;
+            if (!this.name || this.type === 'hidden') return;
             var parsed = parseName(this.name);
             if (!parsed || dateTimeQids.indexOf(parsed.qid) === -1) return;
             var el = this;
@@ -372,7 +365,6 @@ class UserAuditLogPlugin extends PluginBase
             \$(el).off('.ualp-dt').on('dp.change.ualp-dt', logDateChange);
             \$(el).parent().off('.ualp-dt').on('dp.change.ualp-dt', logDateChange);
             \$(el).on('change.ualp-dt', logDateChange);
-            \$(el).on('blur.ualp-dt', logDateChange);
         });
     }
 
@@ -397,6 +389,7 @@ JS
         );
     }
 
+    /** Logs a survey_submit event when the participant completes the survey. */
     public function afterSurveyComplete(): void
     {
         $surveyId = (int) $this->event->get('surveyId');
@@ -414,6 +407,7 @@ JS
         ]);
     }
 
+    /** Handles AJAX requests from the JS listener and writes answer_change or survey_save log entries. */
     public function newDirectRequest(): void
     {
         if ($this->event->get('function') !== 'logAnswerChange') {
@@ -438,12 +432,9 @@ JS
                 'survey_id'         => $surveyId,
                 'participant_token' => $token,
                 'event_type'        => 'survey_save',
-                'page_number'       => ($rawPage !== null && $rawPage !== '') ? (int) $rawPage : null,
+                'page_number'       => $this->parsePageNumber($rawPage),
             ]);
-            http_response_code(200);
-            header('Content-Type: application/json');
-            echo json_encode(['status' => 'ok']);
-            die();
+            $this->sendJsonOk();
         }
 
         $qid    = (int) $request->getParam('question_id');
@@ -454,11 +445,15 @@ JS
 
         try {
             if ($subRaw) {
-                $sub = Question::model()->find(
-                    'parent_qid = :p AND title = :t AND scale_id = 0',
-                    [':p' => $qid, ':t' => $subRaw]
-                );
-                $subQid = $sub ? (int) $sub->qid : null;
+                // Strip LimeSurvey's trailing "comment" suffix so "SQ001comment" resolves to sub-question "SQ001".
+                $subLookup = preg_replace('/comment$/', '', $subRaw);
+                if ($subLookup !== '') {
+                    $sub = Question::model()->find(
+                        'parent_qid = :p AND title = :t AND scale_id = 0',
+                        [':p' => $qid, ':t' => $subLookup]
+                    );
+                    $subQid = $sub ? (int) $sub->qid : null;
+                }
             }
 
             if ($colRaw) {
@@ -469,20 +464,18 @@ JS
                 $colQid = $col ? (int) $col->qid : null;
             }
         } catch (Exception $e) {
-            error_log('[UALP] sub/col question lookup ERROR: ' . $e->getMessage());
+            Yii::log('[UALP] sub/col question lookup ERROR: ' . $e->getMessage(), 'error', 'application.plugins.UserAuditLogPlugin');
         }
 
-        $question    = null;
-        $effectiveQid = $qid;
-        $rankSubQid   = null;
+        $question          = null;
+        $effectiveQid      = $qid;
+        $rankSubQid        = null;
         $resolvedInputType = null;
 
         try {
             $question = $qid ? Question::model()->findByPk($qid) : null;
 
-            // Sub-questions (e.g. ranking positions) may be excluded by the model's
-            // default scope; resolve the parent question and restructure identifiers
-            // so question_id = parent qid, sub_question_id = rank-position qid.
+            // Sub-questions excluded by model scope: resolve parent and store rank sub-id.
             if (!$question && $qid) {
                 $parentQid = (int) Yii::app()->db->createCommand()
                     ->select('parent_qid')
@@ -496,8 +489,7 @@ JS
                 }
             }
 
-            // Fallback 2: ranking questions encode an answer ID (aid) in the field name rather
-            // than a question ID. Look up the parent qid via lime_answers.
+            // Fallback: ranking field may reference a lime_answers aid instead of a qid.
             if (!$question && $qid) {
                 $answerQid = (int) Yii::app()->db->createCommand()
                     ->select('qid')
@@ -511,9 +503,7 @@ JS
                 }
             }
 
-            // Fallback 3: ranking field name IDs are dynamically generated and exist in neither
-            // lime_questions nor lime_answers. Find the ranking question (type='R') in the same
-            // survey+group via raw SQL and treat the submitted qid as a ranked-item sub-identifier.
+            // Fallback: dynamic ranking field IDs exist in neither lime_questions nor lime_answers.
             if (!$question && $qid) {
                 $gidParam = (int) $request->getParam('group_id');
                 $rankQid  = (int) Yii::app()->db->createCommand()
@@ -526,8 +516,7 @@ JS
                     ])
                     ->queryScalar();
                 if ($rankQid) {
-                    // Dynamic field ID = parentQid . rankPosition (e.g. 10241 = qid 1024, position 1).
-                    // Strip the parent prefix to get a human-readable rank position (1, 2, 3…).
+                    // Dynamic field ID = parentQid concatenated with rankPosition (e.g. qid 1024, position 1 → 10241).
                     $rankPosition      = (int) substr((string) $qid, strlen((string) $rankQid));
                     $effectiveQid      = $rankQid;
                     $rankSubQid        = $rankPosition ?: $qid;
@@ -535,7 +524,7 @@ JS
                 }
             }
         } catch (Exception $e) {
-            error_log('[UALP] question resolution ERROR: ' . $e->getMessage());
+            Yii::log('[UALP] question resolution ERROR: ' . $e->getMessage(), 'error', 'application.plugins.UserAuditLogPlugin');
         }
 
         $specificType = $resolvedInputType
@@ -555,7 +544,7 @@ JS
             'survey_id'         => $surveyId,
             'participant_token' => $token,
             'event_type'        => 'answer_change',
-            'page_number'       => ($rawPage !== null && $rawPage !== '') ? (int) $rawPage : null,
+            'page_number'       => $this->parsePageNumber($rawPage),
             'group_id'          => (int) $request->getParam('group_id'),
             'question_id'       => $effectiveQid ?: null,
             'sub_question_id'   => $subQid,
@@ -566,12 +555,10 @@ JS
             'new_value'         => $request->getParam('new_value') !== '' ? $request->getParam('new_value') : null,
         ]);
 
-        http_response_code(200);
-        header('Content-Type: application/json');
-        echo json_encode(['status' => 'ok']);
-        die();
+        $this->sendJsonOk();
     }
 
+    /** Creates the audit log table with all columns and indexes if it does not yet exist. */
     private function ensureTable(): void
     {
         $db    = Yii::app()->db;
@@ -607,10 +594,11 @@ JS
                 $db->createCommand()->createIndex("idx_ual_{$col}", $table, $col);
             }
         } catch (Exception $e) {
-            error_log('[UALP] ensureTable ERROR: ' . $e->getMessage());
+            Yii::log('[UALP] ensureTable ERROR: ' . $e->getMessage(), 'error', 'application.plugins.UserAuditLogPlugin');
         }
     }
 
+    /** Adds columns introduced after the initial schema version (non-destructive migration). */
     private function ensureColumns(): void
     {
         $db    = Yii::app()->db;
@@ -630,10 +618,11 @@ JS
                 $db->createCommand()->addColumn($table, 'rank_position', 'INTEGER');
             }
         } catch (Exception $e) {
-            error_log('[UALP] ensureColumns ERROR: ' . $e->getMessage());
+            Yii::log('[UALP] ensureColumns ERROR: ' . $e->getMessage(), 'error', 'application.plugins.UserAuditLogPlugin');
         }
     }
 
+    /** Inserts a single row into the audit log table. */
     private function writeLog(array $data): void
     {
         $yiiUser = Yii::app()->user;
@@ -662,7 +651,22 @@ JS
                 ]
             );
         } catch (Exception $e) {
-            error_log('[UALP] writeLog ERROR: ' . $e->getMessage());
+            Yii::log('[UALP] writeLog ERROR: ' . $e->getMessage(), 'error', 'application.plugins.UserAuditLogPlugin');
         }
+    }
+
+    /** Sends a 200 JSON response and terminates the request. */
+    private function sendJsonOk(): void
+    {
+        http_response_code(200);
+        header('Content-Type: application/json');
+        echo json_encode(['status' => 'ok']);
+        die();
+    }
+
+    /** Casts a raw page number request param to int, or null if absent or empty. */
+    private function parsePageNumber($raw): ?int
+    {
+        return ($raw !== null && $raw !== '') ? (int) $raw : null;
     }
 }
