@@ -36,12 +36,24 @@
 
 ---
 
+#### Database compatibility
+
+The plugin works with all databases LimeSurvey officially supports: PostgreSQL, MySQL/MariaDB, and MSSQL. All queries use Yii's ORM and query builder — no raw SQL anywhere. The only schema difference across databases is the `id` and `created_at` column types, which are resolved at install time based on the active database driver:
+
+| Database | `id` type | `created_at` type |
+|---|---|---|
+| PostgreSQL | `BIGSERIAL PRIMARY KEY` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` |
+| MySQL / MariaDB | `BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY` | `TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP` |
+| MSSQL | `BIGINT IDENTITY(1,1) PRIMARY KEY` | `DATETIME2 NOT NULL DEFAULT GETDATE()` |
+
+---
+
 #### Table: lime_user_audit_log
 
 | Column             | Type               | Description                                                                 |
 |--------------------|--------------------|-----------------------------------------------------------------------------|
-| id                 | BIGSERIAL PK       | Row identity                                                                |
-| created_at         | TIMESTAMPTZ NOT NULL | Timestamp of the event                                                      |
+| id                 | BIGINT PK (auto)   | Row identity — type varies by DB, see above                                 |
+| created_at         | TIMESTAMP NOT NULL | Timestamp of the event — type varies by DB, see above                       |
 | survey_id          | INTEGER NOT NULL   | LimeSurvey survey ID                                                        |
 | participant_token  | VARCHAR(255)       | Survey access token — resolves to participant via lime_tokens_{surveyId}   |
 | oauth_user_id      | VARCHAR(255)       | Authenticated user ID (NULL if guest)                                       |
